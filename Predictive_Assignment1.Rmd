@@ -1,0 +1,195 @@
+---
+title: "Predictive Analytics Assignment 1-A"
+author: "Shivangi Vashi"
+date: "9/18/2020"
+output: html_document
+number_sections: TRUE
+---
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 1 Homework A: Parameter Space Exploration of a K-Nearest Neighbors Algorithm on a Time Series Problem
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+### 21 September 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+This week we began with the basics of statistics and machine learning. We went over the KNN- K nearest neighbors algorithm. <br>
+
+KNN is a popular algorithm that can be used for both classification and regression. This algorithm is instance based, ie it stores the training values. For regression, each example has a vector of features attributed to that example and its associated numeric value. <br>
+
+Given a new instance, KNN will find k most similar examples, i.e. its nearest neighbors according to a distance metric like the Euclidean distance, and predict its value as an aggregation of the target values associated with its nearest neighbors [1].
+
+In case of KNN for classification, the algorithm stores all possible classes in the training set and assigns the most common class in the k nearest neighbors of the new instance as the class for that instance.
+
+<br><br>
+
+<center>
+$\LARGE Problem$ </center>
+<br><br>
+
+For this assignment, we are using Google Trends time series data for the search term 'Northeastern University', from January 2004 to September 2020.
+
+Using the k-nearest neighbors’ method, we are to find the best value of k to predict the value of the series for the latest month. That is, what is the optimal number of neighbors that will give us the most accurate prediction for the latest month? We also explore whether a higher dimensional model could yield a more accurate prediction. 
+
+ <br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+Before beginning the analysis, I imported the relevant libraries to be used in the analysis. I will be using tidyverse for importing and pre-processing the data, and the 'tsfknn' package to perform the time series forecasting using the knn algorithm. We then import the data and clean take a look at it.
+
+The data has 2 columns, month-year and value. The data represents interest over time in the keyword 'Northeastern University' in [Google Trends](https://trends.google.com/trends/explore?date=all&geo=US&q=%2Fm%2F0225v9).
+
+```{r}
+library(tidyverse)
+library(tsfknn)
+
+
+NUtrends<-read.csv("/Users/shivangi/R Projects/multiTimeline.csv")
+
+head(NUtrends,10)
+
+
+
+```
+
+
+<br><br>
+
+<center>
+$\large Data~Preprocessing$ </center>
+<br><br>
+I renamed the column representing the value of interest from the default to 'Value' for better clarity.
+
+Then I converted the data frame into a time series object so that we can perform forecasting.
+
+The time series starts from Jan 2004, and I end it on August 2020, because we want to predict the value for the latest month ie September 2020 and compare with the actual value. The frequency is 12 because this is a monthly time series.
+
+```{r}
+library(ggplot2)
+
+colnames(NUtrends)[colnames(NUtrends) == "Northeastern.University...United.States."]<- "Value"
+
+NUtimeseries<-ts(NUtrends,start = c(2004,1),end = c(2020,8),frequency = 12)
+
+```
+
+
+<br><br>
+
+<center>
+$\large Prediction$ </center>
+<br><br>
+
+I then created a function that returns the predicted value for each combination of k and n.
+The function being used is *knn_forecasting* from the tsfknn package. h is the number of values to be predicted, k is the number of neighbors and lags= number of lags ie dimensions to be used. h is set to 1 since we want to predict only for the latest month, i.e. September 2020.
+
+The 'msas' parameter is set to _recursive_. msas refers to Multi-step ahead strategy, which determines whether we want to forecast one or more values into the future. Because the recursive strategy uses a one-step ahead model, this means that in the case of KNN, the target of a training example only contains one value [1].
+
+The values of k used are 1 through 10. 
+The values of n ie dimensions used are 2 through 5. n is represented by _lag_ in the function.
+
+For each combination of k and n, I created the knn forecasting model and stored the predictions in the vector _pred_, using a nested for loop for the same. That is, predictions for: (k=1,n=2),(k=1,n=3) and so on with 40 combinations in total.
+
+
+```{r}
+p<-vector()
+kvalue<-vector()
+lag<-vector()
+
+
+models<-function(lag,kvalue){
+  p<-knn_forecasting(NUtimeseries,h=1,k=kvalue,lags=lag,msas="recursive")
+  return(p$prediction)
+  
+}
+
+ 
+ pred<-vector()
+
+for(i in 1:10){
+  for (j in 2:5){
+    pred<-append(pred,models(i,j))
+
+    }
+}
+
+pred
+
+```
+<br><br>
+
+<center>
+$\large Accuracy$ </center>
+<br><br>
+
+For each combination of n and k, I calculated the accuracy by subtracting from the actual value of September, 2020. The actual value for interest in Northeastern University for September 2020 is 48.
+<br>
+
+```{r}
+
+accuracy<-vector()
+
+for (i in 1:length(pred)){
+  accuracy[i]<-NUtrends$Value[201]-pred[i]
+  
+}
+accuracy
+
+
+min(accuracy[accuracy>0])
+
+
+```
+<br>
+Hence, the lowest absolute error is obtained as 0.6667. The respective model for this value is the 26th instance in the predictions, which is:<br>
+**k=7**<br>
+**n=3**
+
+<br><br>
+
+<center>
+$\LARGE Conclusion$  </center>
+<br><br>
+The best value of k to predict interest over time for the search term Northeastern University is 7 neighbours. The model that gave the highest accuracy was the model with 7 neighbours and 3 dimensions. 
+We were therefore able to use k nearest neighbors algorithm for a time series problem, with 7 as the most optimal number of neighbors. We can also conclude that a higher dimensional model does indeed yield better results, but upto a limit. 3 is the optimal number of dimensions for our model.
+
+<br><br>
+
+
+<center>
+$\LARGE References$  </center>
+<br><br>
+[1] Time Series Forecasting with KNN in R: the tsfknn Package, 2019.
+Retrieved from https://journal.r-project.org/archive/2019/RJ-2019-004/RJ-2019-004.pdf
