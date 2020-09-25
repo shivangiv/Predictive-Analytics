@@ -1,0 +1,218 @@
+---
+title: "Predictive Analytics Assignment 1-B"
+author: "Shivangi Vashi"
+date: "9/21/2020"
+output: html_document
+number_sections: TRUE
+---
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 1 Homework B: K Nearest Neighbors for Image Classification
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+### 21 September 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+This week we began with the basics of statistics and machine learning. We went over the KNN- K nearest neighbors algorithm for both regression and classification applications. <br>
+
+This is the easiest machine learning algorithm that simply checks the distance between feature vectors and finds the closest neighbors to the new sample. It then returns the most common category associated with those neighbors as the category for the new sample[1]. <br>
+
+
+<br><br>
+
+<center>
+$\LARGE Problem$ </center>
+<br><br>
+
+For this assignment, we are using the KNN algorithm to build an image classifier for the MNIST fashion item clothing dataset. Fashion-MNIST is a dataset of Zalando'sarticle images containing 60,000 training samples and 10,000 testing samples[2] . Each sample is a 28x28 grayscale image of an article of clothing with 10 classes,<br>
+0- T-shirt/top, 1-Trouser, 2-Pullover, and so on until 9.
+
+Using the k-nearest neighbors’ method, we are to predict the class of the testing samples. We use k=1, 11 and 21 and compare the accuracy of the three models. 
+
+ <br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+Before beginning the analysis, I imported the relevant libraries to be used in the analysis. I will be using tidyverse for importing and pre-processing the data, and the 'caret' package to create the models using the knn algorithm. We then import the data appropriately. I used data.table because it is the fastest function when reading big data sets.
+
+The data has 785 columns, the first being the label column. The rest are columns representing the pixels in the image, with values ranging from 0 to 255.
+
+```{r}
+library(tidyverse)
+library(caret)
+
+fashion_train<-read.table("fashion/fashion_train.csv",nrows = 60000, header = F, quote = "\"", sep = ",")
+
+fashion_test<-read.table("fashion/fashion_test.csv",nrows = 10000, header = F, quote = "\"", sep = ",")
+
+dim(fashion_train)
+
+head(fashion_train,10)
+head(fashion_test,10)
+
+
+```
+<br><br>
+
+<center>
+$\large Data~Preprocessing$ </center>
+<br><br>
+
+We must first prepare the data before we can build the model. The data contains thousands of columns representing the brightness of the pixels in the images. There may be many extra features that do not contribute to the learning of the model. Since we want a parsimonious model, we can remove such features that will interfere with our results. 
+
+We therefore remove zero or near-zero variance features that contain single values that provide no information to a model. According to [3], if the fraction of unique values over the sample size is low and the ratio of the frequrncy of the second most prevalent value is large then we can remove such variables from the model. 
+
+Using the nearZeroVar function to find which columns to remove from the dataset. We can see there are 561 such columns.
+
+We use setdiff() to determine which columns should be retained. This shows 223 columns.
+```{r}
+
+x <- as.matrix(fashion_train[,2:785],60000,784)
+
+y <- unlist(fashion_train[,1])
+y <- factor(y)
+
+nzv <- nearZeroVar(x)
+length(nzv)
+
+
+dim(x)
+
+col_index <- setdiff(1:784,nzv)
+length(col_index)
+
+
+```
+
+#### Training the Models
+
+We now train the models using this modified training data set. I created three models for each value of k- 1, 11 and 21 respectively.
+
+
+I used the train() function from the caret package.
+
+fashion_train is the training sample used. y has the labels for the training samples.<br>
+The method is set as 'knn' for the algorithm to be used, tuneGrid specifies the tuning parameters.
+
+You can specify multiple parameters and use expand.grid() so that the function iterates over a combination of the values, but since we want to compare the models using the 3 k values separately, I created three separate models with each k value.
+
+```{r}
+
+set.seed(123)
+train_knn1 <- train(fashion_train[,col_index], y, 
+                   method = "knn", 
+                   tuneGrid = data.frame(k=1),
+                   trControl =trainControl(method="none"))
+
+
+
+train_knn11 <- train(fashion_train[,col_index], y, 
+                   method = "knn", 
+                   tuneGrid = data.frame(k=11),
+                   trControl =trainControl(method="none"))
+
+
+train_knn21 <- train(fashion_train[,col_index], y, 
+                   method = "knn", 
+                   tuneGrid = data.frame(k=21),
+                   trControl =trainControl(method="none"))
+
+```
+
+
+
+#### Testing
+
+Now that the models are created, we test them against the testing sample. We first remove the label column since this is the column we want to predict. I predicted labels for the testing samples using each of the models.
+
+I then converted the labels to factors so that they can be compared using the confusionMatrix function.
+
+Looking at the confusion matrices, we see that the accuracy of Model 2 with k=11 is the best, 0.79. If we further look into accuracy by class, we can see that over all models the accuracy for classes 1 and 9 are the highest, that means the algorithm is good at predicting labels 1 and 9. This is also seen by looking at the diagonal on the confusion matrix, for each model the highest counts are for classes 1 and 9. 
+
+
+```{r}
+fashion_test_knn <- as.matrix(fashion_test[-1],10000,784)
+
+#predicting labels for test dataset
+y_hat_knn1 <- predict(train_knn1, fashion_test_knn)
+
+y_hat_knn11 <- predict(train_knn11, fashion_test_knn)
+
+y_hat_knn21 <- predict(train_knn21, fashion_test_knn)
+
+
+#converting labels to factor
+fashion_test$V1<-as.factor(fashion_test$V1)
+y_hat_knn1<-as.factor(y_hat_knn1)
+y_hat_knn11<-as.factor(y_hat_knn11)
+y_hat_knn21<-as.factor(y_hat_knn21)
+
+#confusion matrices
+cm1<-confusionMatrix(y_hat_knn1,fashion_test$V1)
+cm1
+sprintf("The accuracy of Knn Model 1 with k=1 is: %0.4f",cm1$overall[1])
+
+cm11<-confusionMatrix(y_hat_knn11,fashion_test$V1)
+cm11
+sprintf("The accuracy of Knn Model 2 with k=11 is: %0.4f",cm11$overall[1])
+
+cm21<-confusionMatrix(y_hat_knn21,fashion_test$V1)
+cm21
+sprintf("The accuracy of Knn Model 3 with k=21 is: %0.4f",cm21$overall[1])
+
+```
+
+<center>
+$\LARGE Conclusion$  </center>
+<br><br>
+K nearest neighbors algorithm was implemented for image classification for the Fashion MNIST dataset. The models are fairly simple, with k values 1, 11 and 21 respectively. When testing it against our dataset, we find the best value of k to predict the class of clothing items for the Fashion MNIST dataset is 11, with an accuracy of 0.7900 or 79%. 
+
+The accuracy could be further improved by using ensemble learning algorithms like random forest, or even neural networks. which are more suited for image classification.
+
+<br><br>
+
+
+<center>
+$\LARGE References$  </center>
+<br><br>
+
+[1] Adrian Rosebrock, 2016. "k-NN classifier for image classification".
+Retrieved from: https://www.pyimagesearch.com/2016/08/08/k-nn-classifier-for-image-classification/
+
+[2] fashif, 2019. "Fashion-MNIST". Retrieved from: https://github.com/zalandoresearch/fashion-mnist
+
+[3] Bradley Boehmke and Brandon Greenwell, 2020. " Hands-On Machine Learning with R". Retrieved from: https://bradleyboehmke.github.io/HOML/engineering.html#feature-filtering
