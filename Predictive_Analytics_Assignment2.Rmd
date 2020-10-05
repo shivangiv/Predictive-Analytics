@@ -1,0 +1,238 @@
+---
+title: "Predictive Analytics Assignment2"
+author: "Shivangi Vashi"
+date: "9/27/2020"
+output: html_document
+number_sections: TRUE
+---
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 1 Homework B: Logistic Regression for Image Classification
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+### 21 September 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+This week we learnt about logistic regression. We went over the intuition and pseudo
+code behind the algorithm, and how to apply it.
+
+This is a classification algorithm that predicts the probability of an event or class
+occurring, that in its general form has a binary outcome. The outcome is classified as 1
+indicating that an event occurred/ that a class is present, and 0 indicating no event [1].
+
+The logistic regression model has the following form:
+
+\[ \log \frac{p(y=1)}{p(y=0)}=\beta_0+\beta_1x \]
+<br>
+where, p(y=1): probability of success<br>
+       p(y=0): probability of failure<br>
+       $\beta$: parameters of the model
+<br><br>
+
+<center>
+$\LARGE Problem$ </center>
+<br><br>
+
+This week we are given the MNIST handritten digits dataset. It contains a training and testing set of 28x28 grayscale images of handwritten digits from 0-9. The images are encoded as a row of 784 integer values ranging from 0-255, indicating the brightness of each pixel. The first column contains the label, ie digit associated with that image.
+
+Using logistic regression, we build 10 models, one for each digit to classify the images to their appropriate labels.
+
+ <br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+Before beginning the analysis, I imported the relevant libraries to be used in the
+analysis. I will be using tidyverse for importing and pre-processing the data, and the 'caret' package to create confusion matrices for each model. I then read the data into the environment for further processing. We have two datasets, train with 60,000 rows and test with 10,000 rows.
+
+```{r, message=FALSE}
+library(tidyverse)
+
+
+mnist_train<-read.table("MNIST-data/mnist_train.csv",nrows = 60000, header = F, quote = "\"", sep = ",")
+
+mnist_test<-read.table("MNIST-data/mnist_test.csv",nrows = 10000, header = F, quote = "\"", sep = ",")
+
+
+# head(mnist_train,10)
+
+# rotate <- function(x) {
+#   return(t(apply(x, 2, rev)))
+# }
+# plot_matrix <- function(vec) {
+#   q <- matrix(vec, 28, 28, byrow = TRUE)
+#   nq <- apply(q, 2, as.numeric)
+#   image(rotate(nq), col = gray((0:255)/255))
+# }
+# 
+# plot_matrix(mnist_train[7, 2:785]) 
+
+
+
+
+```
+
+<br><br>
+
+<center>
+$\large Data~Preprocessing$ </center>
+<br><br>
+We first must normalize our data, which I did using min-max normalization. Feature scaling is an important preprocessing step to ensure all features of the model are treated fairly.
+
+I then created a function to relabel the data. In order to create 10 binary classification models, we need to have 10 copies of the dataset, one for each digit, where the label is 1 if that digit/class is present and 0 for all other digits.
+We can then use each of these relabeled datasets to train our model for each class / digit.
+
+```{r}
+
+#Min-Max Normalization
+mnist_train[,2:784] <- (mnist_train[,2:784] - min(mnist_train[,2:784])) / (max(mnist_train[,2:784]) - min(mnist_train[,2:784]))
+
+mnist_test[,2:784] <- (mnist_test[,2:784] - min(mnist_test[,2:784])) / (max(mnist_test[,2:784]) - min(mnist_test[,2:784]))
+
+#Function to create separate training sets for each label
+relabelling<-function(relabeldata,label){
+  relabeldata<-relabeldata%>%
+              mutate(V1=case_when(relabeldata$V1==label~1,
+                                  TRUE~0))
+
+}
+
+#Loop to store each training set in a separate data frame
+for(i in 0:9){
+  
+  
+  assign(paste('class',i,sep=''),relabelling(mnist_train,i))
+  
+}
+
+#Loop to store each training set in a separate data frame
+for(i in 0:9){
+  
+  assign(paste('testclass',i,sep=''),relabelling(mnist_test,i))
+  
+}
+
+train_sets<-data.frame(class0,class1,class2,class3,class4,class5,class6,class7,class8,class9)
+test_sets<-data.frame(testclass0,testclass1,testclass2,testclass3,testclass4,testclass5,testclass6,testclass7,testclass8,testclass9)
+
+#Removing unneeded datasets from the environment
+rm(mnist_train,mnist_test)
+
+rm(class0,class1,class2,class3,class4,class5,class6,class7,class8,class9)
+
+rm(testclass0,testclass1,testclass2,testclass3,testclass4,testclass5,testclass6,testclass7,testclass8,testclass9)
+
+```
+
+<center>
+$\large Training~the~models$ </center>
+<br><br>
+The data is now ready to be put into the models for training.
+I have created a function 'trainingmodels' for the logistic regression model formula using the _glm_ function from the stats library. I then use predict to predict the labels for the test data for each model. The function will return a list of predicted values.
+The next step is to loop through each pair of train and test data sets to train the models for each digit. The pairs are passed as parameters to the _trainingmodels_ function and the predictions are stored in a list.
+
+```{r}
+library(caret)
+
+glm_model<-vector()
+pred<-vector()
+
+trainingmodels<-function(traindata,testdata){
+            glm_model <- glm(V1~.,family=binomial(link=logit), data =traindata)
+            pred<-predict(glm_model,testdata[-1])
+            return(pred)
+            }
+
+
+# class0_glm <- glm(V1~.,family=binomial(link=logit), data =class0)
+# pred0<-predict(class0_glm,testclass0[-1])
+
+
+predictions<-vecotr("list",length(10))
+
+for(i in 1:10){
+  predictions[[i]]<-trainingmodels(train_sets[[i]],test_sets[[i]])
+  }
+
+```
+
+<center>
+$\large Evaluating~model~accuracy$ </center>
+<br><br>
+
+The result of the predictions is a set of probabilities for each digit. Since we need to compare this to the actual labels, we need to normalize the probabilities into a probability distribution.
+We do this using the _softmax_ function. The predicted digit will have the highest probability. _Softmax_ applies the softmax to the predicted values.
+
+We then create the confusion matrices to evaluate the accuracy of each model.
+```{r}
+
+
+softmax <- function (x) {
+  y <- max(x)
+  z<-  y + log(sum(exp(x - y)))
+  return(exp(x - z))
+  
+}
+
+confusionmatrices<-vector("list",length(10))
+sm_pred<-vector("list",length(10))
+
+for(i in 1:10){
+  sm_pred[[i]]<-softmax(predictions[[i]])
+  confusionmatrices[[i]]<-
+    confusionMatrix(as.factor(sm_pred[[i]]),as.factor(test_sets[[i]]$V1))
+  
+}
+
+#Printing accuracies
+for(i in 1:10){
+  accuracies<-sprintf("Accuracy of class %d %s %0.3f",i,"model is:",confusionmatrices[[i]]$overall[1])
+  print(accuracies)
+  
+}
+```
+
+<center>
+$\large Conclusion$ </center>
+<br><br>
+
+As we find, the models for class 0, 4, 5, 6 and 8 perform the best with 90% accuracy. The least accurate is the model for class 1 at 88.6%. However, overall, all of these models have
+performed generally well.
+
+<center>
+$\large References$ </center>
+<br><br>
+[1] Trevor Hastie, et al. 2009. The Elements of Statistical Learning. Springer Series in Statistics.
+
