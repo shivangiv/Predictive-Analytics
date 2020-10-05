@@ -12,7 +12,7 @@ number_sections: TRUE
 
 
 ### ALY 6020 Predictive Analytics
-### Assignment 1 Homework B: Logistic Regression for Image Classification
+### Assignment 2 Logistic Regression for Image Classification
 
 ### Shivangi Vashi
 
