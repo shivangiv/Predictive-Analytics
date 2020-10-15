@@ -5,4 +5,6 @@
 
 [Logistic Regression for Image Classification](https://github.com/shivangiv/Predictive-Analytics/blob/master/Predictive_Analytics_Assignment2.Rmd)
 
+[Gradient Boosting Models](https://github.com/shivangiv/Predictive-Analytics/blob/master/Predictive_Analytics_Assignment3.Rmd)
+
 [Neural Network for Cosine Function Approximation](https://github.com/shivangiv/Predictive-Analytics/blob/master/NeuralNetworks_Assignment4.Rmd)
