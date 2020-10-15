@@ -1,0 +1,281 @@
+---
+title: "Function Approximation"
+output: html_document
+---
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 4: Neural Networks
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+###14 October 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+
+This week we learnt neural networks. Artificial neural networks are data models created drawing inspiration from the structure of the human brain. They are composed of layers with a number of nodes, that mimic the behavior of a neuron. There is an input layer, that is fed the training data, and then a number of hidden layers,and finally an output layer, that gives the result. Each connection between the nodes has a weight, which gets multiplied to the data passing through. An activation function present in each node determines whether the information will be passed on to the next node or not, if the value passes a certain threshold. As the network learns, the weights are adjusted to an optimal value for better accuracy.
+
+<br><br>
+
+<center>
+$\LARGE Problem$ </center>
+<br><br>
+Our problem is to approximate the given function:
+\[ f(x)=0.8\cos(3.2\pi*x)+0.64\cos(10.24\pi*x)+0.51\cos(32.77\pi*x) \]
+<br>
+in the interval [0,2] sampled in increments of 0.005 units. We must try to acheive an accuracy where the mean absolute error is <= 0.05. 
+<br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+I first created the function and plotted it. I then generated the samples in the given range to feed into the network. I splot the data with 80% as the training set and 20% as the testing. 
+
+I then normalized the data before beginning the modelling.
+
+```{r warning=FALSE, message=FALSE}
+library(tidyverse)
+
+# Function 
+# curve(0.8*cos(3.2*pi*x)+0.64*cos(10.24*pi*x)+0.51*cos(32.77*pi*x),0,2)
+
+func <- function(x){ 0.8*cos(3.2*pi*x)+0.64*cos(10.24*pi*x)+0.51*cos(32.77*pi*x)
+}
+
+#View function
+p <- ggplot(data.frame(x = c(0, 2)), aes(x = x)) + stat_function(fun = func)
+p
+
+# Generating samples
+set.seed(123)
+x <- sample(seq(0,2,by=0.0005))
+
+y <- func(x)
+data<-data.frame(x,y)
+#splitting data into train and test
+train_index <- sample(seq_len(nrow(data)),size = floor(0.80*nrow(data)))
+
+train<-data[train_index,]
+test<-data[-train_index,]
+# Min-max normalization
+train<-(train - min(train)) / (max(train) - min(train))
+test<-(test - min(test)) / (max(test) - min(test))
+```
+
+### Creating the gradient boosting model
+
+I created this gradient boosting model to compare the performance of the neural network to. The model performs really well with an error of 0.001. It has 50 rounds, the rmse progressively getting better at each round.As we see in the plot, it approximates the function almost exactly.
+
+```{r warning=FALSE, message=FALSE}
+library(xgboost)
+library(DiagrammeR)
+
+xgb_model <-xgboost(data=xgb.DMatrix(as.matrix(train),label=train$y),nrounds=50,early_stopping_rounds = 10)
+
+xgb_predict<-predict(xgb_model,xgb.DMatrix(as.matrix(test),label=test$y))
+
+xgb_error<-mean(abs(test$y-xgb_predict))
+
+sprintf("Mean absolute error for XG Boost model is: %0.5f",xgb_error)
+
+ggplot(data=test,aes(x=test$x,y=test$y))+geom_line(color="red")+
+  geom_step(data=data.frame(test$x,xgb_predict),aes(x=test.x,y=xgb_predict),color="green")
+
+```
+
+### Create neural network
+
+We now create a neural network. We will be using tensorflow and the keras interface for our model. We create a sequential neural network that we first define and initialize. We specify the number of layers, units within each layer, input shape, and activation function for each layer. We will be using a combination of activation functions: relu (Rectifier Linear Unit), tanh, leaky Relu and linear.
+
+```{r warning=FALSE, message=FALSE}
+
+library(reticulate)
+library(tensorflow)
+library(keras)
+
+# Initialize a sequential model
+model <- keras_model_sequential() 
+
+# Add layers to the model
+model %>%
+  layer_dense(input_shape = c(1), units = 100, activation = "relu")%>%
+  layer_dense(units = 64) %>%layer_activation_leaky_relu()%>%
+  layer_dense(units = 64,activation = "tanh")%>%
+  layer_dense(units = 64,activation = "tanh")%>%
+  layer_dense(units = 64,activation = "relu")%>%
+  layer_dense(units = 1,activation = "linear") 
+
+
+#add a loss function and optimizer
+model %>%
+  compile(
+    loss = "mean_absolute_error",
+    optimizer = "adam",
+    metrics = "mean_absolute_error"
+  )
+```
+<br>
+The structure of the model can be viewed by using the summary() function.
+
+The first input layer has 100 units, and each of the hidden layers has 64 units or nodes. The output layer has one unit, because our output is a single variable *y*. 
+
+```{r}
+summary(model)
+
+```
+
+
+<br>
+We now train the data using fit(). We train the data over 5000 iterations, with batch size 8. This means 8 training samples are fed as input for each iteration. The validation split within the training is 0.3, ie a 70/30 split. 
+We visualize the trained model and see that the loss is minimized after each epoch and validation step.
+
+```{r}
+
+# fit model with our training data set, training will be done for 200 times data set
+# Fit the model 
+
+fitted_model<-fit(model,
+                  train$x, 
+                  train$y, 
+                  epochs = 3500, 
+                  batch_size=32,
+                  validation_split = 0.3,
+                  verbose=0
+                  )
+
+#Visualize trained model
+plot(fitted_model)
+```
+
+### Neural network evaluation
+
+After training, we evaluate the model using evaluate(). The result shows us the loss and mean absolute error, which is 0.05. We have hence acheived our prescribed accuracy. We generate the predictions using the predict() function. Visualizing the performance, we see that the model approximates the function decently well. 
+
+```{r}
+#Evaluate model
+model%>%evaluate(test$x,test$y)
+
+#Produce predicted y
+pred<- model %>% predict(test %>% select(-y))
+
+# Mean Absolute Error
+sprintf("Mean absolute error for the neural network is: %0.5f",mean(abs(test$y-pred)))
+
+#Visualize performance
+ggplot()+
+  geom_line(data=test,aes(x=x,y=y),color="red")+
+  geom_line(data=data.frame(test$x,pred),aes(x=test.x,y=pred),color="blue")
+
+```
+
+
+```{r warning=FALSE, message=FALSE,echo=FALSE}
+# library(tfdatasets)
+# 
+# spec <- feature_spec(train, y ~ . ) %>% 
+#   step_numeric_column(all_numeric(), normalizer_fn = scaler_standard()) %>% 
+#   fit()
+# 
+# 
+# build_model <- function() {
+#   input <- layer_input_from_dataset(train %>% select(-y))
+# 
+#   output <- input %>% 
+#     layer_dense_features(dense_features(spec)) %>% 
+#     layer_dense(units = 100, activation = "relu") %>%
+#     layer_dense(units = 64, activation = layer_activation_leaky_relu()) %>%
+#     layer_dense(units = 64, activation = "tanh") %>%    
+#     layer_dense(units = 64, activation = "relu") %>% 
+#     layer_dense(units = 1, activation= "linear" ) 
+#   
+#   model2 <- keras_model(input, output)
+#   
+#   model2 %>% 
+#     compile(
+#       loss = "mean_absolute_error",
+#       optimizer = "adam",
+#       metrics = list("mean_absolute_error")
+#     )
+#   
+#   model2
+# }
+# # Display training progress by printing a single dot for each completed epoch.
+# print_dot_callback <- callback_lambda(
+#   on_epoch_end = function(epoch, logs) {
+#     if (epoch %% 80 == 0) cat("\n")
+#     cat(".")
+#   }
+# )    
+# 
+# model2 <- build_model()
+# 
+# history <- model2 %>% fit(
+#   x = train$x,
+#   y = train$y,
+#   epochs = 1000,
+#   validation_split = 0.3,
+#   batch_size=5,
+#   verbose = 0,
+#   callbacks = list(print_dot_callback)
+# )
+# 
+# plot(history)
+# 
+# c(loss, mae) %<-% (model2 %>% evaluate(test$x, test$y, verbose = 0))
+# 
+# sprintf("Mean absolute error on test set: %0.3f ",mae)
+# 
+# test_predictions <- model2 %>% predict(test$x)
+# 
+# 
+# mean(abs(test$y-test_predictions))
+# 
+# 
+# test_predictions
+# plot(test,type="l")
+# plot(test$x,test_predictions,type="l")
+```
+
+<center>
+\large$Conclusion$</center>
+We successfully implemented an artificial neural network for approximating our given cosine function. The mean absolute error for our network is 0.05, which was the given prescribed accuracy. Comparing with the given data, our approximated function is very similar to the given one. We also created an xgboost model to compare the performance, which performs slightly in this case with an error of 0.01.
+<br>
+
+
+
+<center>
+\large$References$</center>
+
+R Interface for Tensorflow. Retrieved from: https://tensorflow.rstudio.com/
+Package 'keras'. Retrieved from:https://cloud.r-project.org/web/packages/keras/keras.pdf
