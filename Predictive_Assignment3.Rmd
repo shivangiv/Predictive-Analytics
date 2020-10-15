@@ -1,0 +1,198 @@
+---
+title: "Assignment3"
+author: "Shivangi Vashi"
+date: "10/5/2020"
+output: html_document
+number_sections: TRUE
+---
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 3 Gradient Boosting Models
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+###6 October 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+
+This week we learnt about ensemble learning and decision trees. We learnt about entropy, information gain and how to select the root node for a tree. 
+
+Random forest the first ensemble supervised algorithm usually trained with the 'bagging' method[1]. The random forest builds n number of decision trees, while selecting the best feature among a random subset of features. This means, that each tree uses a different subset of features for splitting a node.
+This is why, the more the number of trees, the better the algorithm generally performs.
+
+The second method we will explore is the gradient boosting model. This is one of the most powerful and accurate models. It is an ensemble of decision trees that are weak learners that are converted iteratively to a strong learner[2]. A loss function is used to estimate how good the model is at predicting the given data. At each stage, the algorithm tries to minimize the loss function.
+
+<br><br>
+
+<center>
+$\LARGE Problem$ </center>
+<br><br>
+
+This week we are once again working with the MNIST handritten digits dataset. It contains a training and testing set of 28x28 grayscale images of handwritten digits from 0-9. The images are encoded as a row of 784 integer values ranging from 0-255, indicating the brightness of each pixel. The first column contains the label, ie digit associated with that image.
+
+Using random forest, we first build 3 models, with number of trees= 1, 10 and 100 respectively. We also build a gradient boosting model with learning rate 0.1 and maximum depth 4. We compare the accuracy of these models with the previously made logistic regression model. The logistic regression model on average had an accuracy of about 85%. 
+
+ <br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+Before beginning the analysis, I imported the relevant libraries to be used in the
+analysis. I will be using tidyverse for importing and pre-processing the data, and 'sparklyr' for faster processing.
+
+I then read the data into the environment for further processing. We have two datasets, train with 60,000 rows and test with 10,000 rows.
+
+```{r, message=FALSE}
+library(tidyverse)
+library(sparklyr)
+
+
+sc <- spark_connect(master = "local", spark_home = "/Users/shivangi/Downloads/spark-3.0.0-preview2-bin-hadoop2.7")
+
+mnist_train<-spark_read_csv(sc,name="mnist_train",path="MNIST-data/mnist_train.csv",header=FALSE,memory = FALSE)
+
+mnist_test<-spark_read_csv(sc,name="mnist_test",path="MNIST-data/mnist_test.csv",header=FALSE,memory = FALSE)
+
+
+#Ensuring all of the data has been read
+sdf_dim(mnist_train)
+sdf_dim(mnist_test)
+
+
+```
+
+<br><br>
+
+
+
+<center>
+$\large Random~Forest~models$ </center>
+<br><br>
+
+#### Training the models
+
+We create the random forest models using the _ml_random_forest_classifier_ function from sparklyr. We create 3 models for number of trees = 1, 10 and 100. We train the models on the mnist_train data set.
+
+```{r}
+
+
+rf1<-ml_random_forest_classifier(x=mnist_train,num_trees=1,formula=V1~.)
+
+rf10<-ml_random_forest_classifier(x=mnist_train,num_trees=10,formula=V1~.)
+
+rf100<-ml_random_forest_classifier(x=mnist_train,num_trees=100,formula=V1~.)
+
+```
+
+#### Testing the models
+
+We test the model using 2 methods, the _ml_evaluate_ and _ml_predict_. The results are almost the same for both, but it is good to try different methods to see which works the best. 
+The accuracy of the random forest with 100 trees performs the best with 86.5%. 
+```{r}
+library(caret)
+
+pred1<- ml_evaluate(rf1,mnist_test)
+
+pred10<-ml_evaluate(rf10,mnist_test)
+
+pred100<-ml_evaluate(rf100,mnist_test)
+
+sprintf("Accuracy of Random Forest with 1 tree is: %.3f%%", 100*pred1)
+sprintf("Accuracy of Random Forest with 1 tree is: %.3f%%", 100*pred10)
+sprintf("Accuracy of Random Forest with 1 tree is: %.3f%%", 100*pred100)
+
+#Another method of obtaining accuracy
+m1<-ml_predict(rf1, mnist_test) %>% collect()
+confusionMatrix(as.factor(m1$prediction),as.factor(m1$label))
+
+
+m10<-ml_predict(rf10, mnist_test) %>% collect()
+confusionMatrix(as.factor(m10$prediction),as.factor(m10$label))
+
+
+m100<-ml_predict(rf100, mnist_test) %>% collect()
+confusionMatrix(as.factor(m100$prediction),as.factor(m100$label))
+
+```
+
+<center>
+$\large Gradient~Boosting~Model$ </center>
+<br><br>
+
+
+We now create the gradient boosting model. We will be using *xgboost* model, or extreme gradient boosting, which is an optimized efficient and scalable implementation of the gradient boosting framework.
+
+We first preprocess the data and create a dense matrix to use in the model.
+We then use the _xgboost_ function to train our model. The model is trained in 20 rounds, keeping step length / learning rate 0.1 and max depth 4. We specify softmax to collapse the predicted probabilities to the test classes.
+
+We then evaluate the model using a confusion matrix. 
+
+```{r message=FALSE}
+library(xgboost)
+library(data.table)
+
+
+xgb_train<-fread("MNIST-data/mnist_train.csv")
+xgb_test<-fread("MNIST-data/mnist_test.csv")
+
+xgb_model <- xgboost(data=xgb.DMatrix(as.matrix(xgb_train[,-1]),label=xgb_train$V1),
+                         nrounds=20,
+                         num_class=10,
+                         params=list(objective="multi:softmax",eta=0.1,max_depth=4))
+
+
+xgb_predict<-predict(xgb_model,xgb.DMatrix(as.matrix(xgb_test[,-1]),label=xgb_test$V1))
+
+xgb_cm<-confusionMatrix(as.factor(xgb_predict),as.factor(xgb_test$V1))
+
+sprintf("Gradient boosting model accuracy is: %.3f%%",100*xgb_cm$overall[1])
+
+```
+
+<center>
+$\large Conclusion$ </center>
+<br><br>
+The random forest models improve as number of trees increase, however, the gradient boosting model has performed the best, giving an overall accuracy of 90%. It even outperforms the logistic regression model(accuracy=85%). The reason is clear; the gradient boosting model iteratively improves the performance of the weak learners by minimizing the average of the loss function. The result is that a single strong learner is created.
+<br>
+
+<center>
+$\large References$ </center>
+<br><br>
+[1] Niklas Donges, 2019. A Complete Guide To The Random Forest Algorithm. 
+Retrieved from:https://builtin.com/data-science/random-forest-algorithm
+
+[2] Jason Brownlee, 2016. A Gentle Introduction to the Gradient Boosting Algorithm for Machine Learning. Retrieved from: https://machinelearningmastery.com/gentle-introduction-gradient-boosting-algorithm-machine-learning/
+
+
