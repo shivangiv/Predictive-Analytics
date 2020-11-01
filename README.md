@@ -8,3 +8,5 @@
 [Gradient Boosting Models](https://github.com/shivangiv/Predictive-Analytics/blob/master/Predictive_Assignment3.Rmd)
 
 [Neural Network for Cosine Function Approximation](https://github.com/shivangiv/Predictive-Analytics/blob/master/NeuralNetworks_Assignment4.Rmd)
+
+[Comparing Naive Bayes to XGBoost for Customer Transactions Prediction](https://github.com/shivangiv/Predictive-Analytics/blob/master/Predictive_Analytics_Assignment5.Rmd)
