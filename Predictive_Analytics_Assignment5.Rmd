@@ -1,0 +1,153 @@
+---
+title: "Naive Bayes Algorithm"
+author: "Shivangi Vashi"
+output:
+  html_document:
+    df_print: paged
+number_sections: yes
+---
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<center>
+
+
+### ALY 6020 Predictive Analytics
+### Assignment 5 Naive Bayes Algorithm
+
+### Shivangi Vashi
+
+
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+  
+### Instructor: Zhi He
+### Fall 2020
+###23 October 2020
+### Northeastern University
+</center>
+
+******
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+<br> <br> <br> <br>
+
+<style>
+body {
+text-align: justify
+font-size: 16pt}
+</style>
+
+<center>
+$\LARGE Introduction$  </center>
+
+<br><br>
+
+The Naive Bayes algorithm is a classification algorithm based on Baysian inference that assumes complete independence among features. Even though in many situations this may not hold true, there are cases where features may be highly correlated. Desipte these assumptions however, naive Bayes classifiers often outperform far more sophisticated algorithms. This may be because even though the individual class density estimates may be biased, this might not hurt the posterior probabilities that much especially in the decision regions(Hastie, 2017). 
+
+In this assignment, we perform the naive Bayes algorithm on the [Santander Customer Transaction Prediction](https://www.kaggle.com/c/santander-customer-transaction-prediction/data), a Kaggle competition to determine which customer will make a transaction. The data is anonmymized with 200 features and one binary target variable, with 1 signifying transaction made and 0 meaning no transaction made. 
+
+I will be using naive Bayes and XG Boost as to predict the target variable, and compare their performance.
+
+
+ <br><br>
+
+
+<center>
+$\LARGE Analysis$  </center>
+<br><br>
+
+I will be using *tidyverse* for data manipulation, *naivebayes* for a high speed implementation of the naive bayes classifier, *xgboost* for the gradient boosting algorithm implementation and *caret* to generate the confusion matrix to evaluate the models.
+
+I have split the data as 70% for training and 30% to test the models.
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(data.table)
+library(naivebayes)
+library(caret)
+library(xgboost)
+
+
+train<-fread("train.csv")
+set.seed(123)
+
+#splitting data into train and test
+train_index <- sample(seq_len(nrow(train)),size = floor(0.70*nrow(train)))
+
+train<-train[train_index,]
+test<-train[-train_index,]
+
+
+dim(train)
+dim(test)
+
+
+```
+
+<center>
+$\large Naive~Bayes~Model$ </center>
+<br><br>
+
+The naive Bayes classifier is trained on the features using the training data set. We then use *predict()* to generate predictions for the test data. 
+
+```{r}
+
+nb_model<-naive_bayes(train[,-c(1:2)],as.factor(train$target))
+
+pred<-predict(nb_model,test[,-c(1:2)])
+
+cm_nb<-confusionMatrix(as.factor(pred),as.factor(test$target))
+cm_nb
+
+cm_nb
+
+```
+
+By the confusion matrix we see the overall accuracy of the model is 92%, with Sensitivity 98.4% and Specificity 36.5%.
+
+<center>
+$\large Gradient~Boosting~Model$ </center>
+<br><br>
+
+
+We now create the gradient boosting model. We will be using *xgboost* model, or extreme gradient boosting, which is an optimized efficient and scalable implementation of the gradient boosting framework.
+
+We create a dense matrix to use in the model. We then use the _xgboost_ function to train our model. The model is trained in 50 rounds We specify binary to collapse the predicted probabilities to the test classes.
+
+We then evaluate the model using a confusion matrix. 
+
+```{r}
+
+
+xgb_model <- xgboost(data=xgb.DMatrix(as.matrix(train[,-c(1:2)]),label=train$target),
+                         nrounds=50,
+                         params=list(objective="binary:logistic"))
+
+
+xgb_predict<-predict(xgb_model,as.matrix(test[,-c(1:2)]))
+
+testlabels<-as.numeric(test$target)
+xgb_cm<-confusionMatrix(as.factor(as.numeric(xgb_predict > 0.5)),as.factor(testlabels))
+
+xgb_cm
+
+
+
+```
+
+According to the results obtained by the confusion matrix, the model has an accuracy of 93%, with Sensitivity 99% and Specificity 39.9%. 
+
+
+<center>
+$\large Conclusion$ </center>
+<br><br>
+Comparing the Specificity, since the negative class in our case is 1, which is what we are trying to predict, the xgboost model performs slightly better than the naive Bayes model. However the difference in accuracy is neglible, and hence for such simpler use cases naive Bayes could be employed and would yield satisfactory results.
+
+<center>
+$\large References$ </center>
+<br><br>
+
+Hastie, Tibshirani, Friedman, 2017. _The Elements of Statistical Learning_. Published by Springer in the Springer Series in Statistics.
