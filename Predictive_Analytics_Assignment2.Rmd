@@ -180,7 +180,7 @@ trainingmodels<-function(traindata,testdata){
 # pred0<-predict(class0_glm,testclass0[-1])
 
 
-predictions<-vecotr("list",length(10))
+predictions<-vector("list",length(10))
 
 for(i in 1:10){
   predictions[[i]]<-trainingmodels(train_sets[[i]],test_sets[[i]])
